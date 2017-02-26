@@ -9,23 +9,37 @@ import (
 )
 
 func workstationInstallPaths() ([]string, error) {
-	const keypath = `SOFTWARE\Wow6432Node\VMware, Inc.\VMware Workstation`
-	const keymode = registry.READ | registry.ENUMERATE_SUB_KEYS
-	key, err := registry.OpenKey(registry.LOCAL_MACHINE, keypath, keymode)
-	if err != nil {
-		return nil, err
+	const (
+		keypath1 = `SOFTWARE\Wow6432Node\VMware, Inc.\VMware Workstation`
+		keypath2 = `SOFTWARE\VMware, Inc.\VMware Workstation`
+		regKey   = registry.LOCAL_MACHINE
+		access   = registry.QUERY_VALUE
+	)
+	key, e1 := registry.OpenKey(regKey, keypath1, access)
+	if e1 != nil {
+		var e2 error
+		key, e2 = registry.OpenKey(regKey, keypath2, access)
+		if e2 != nil {
+			return nil, fmt.Errorf("opening VMware Work Station registry keys: (%s): %s; (%s): %s",
+				keypath1, e1, keypath2, e2)
+		}
 	}
+	defer key.Close()
+
+	var first error
 	var paths []string
-	if s, _, err := key.GetStringValue("InstallPath64"); err == nil {
-		paths = append(paths, s)
-	}
-	if s, _, err := key.GetStringValue("InstallPath"); err == nil {
-		if len(paths) == 0 || paths[0] != s {
+
+	for _, k := range []string{"InstallPath64", "InstallPath"} {
+		s, _, err := key.GetStringValue(k)
+		if err != nil && first == nil {
+			first = err
+		} else {
 			paths = append(paths, s)
 		}
 	}
+
 	if len(paths) == 0 {
-		return nil, fmt.Errorf("reading registry key (%s): %s", keypath, err)
+		return nil, fmt.Errorf("could not find VMware Work Station install path in registry:", first)
 	}
 	return paths, nil
 }
